@@ -1,0 +1,142 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Penalty Kings</title><link rel="stylesheet" href="game-base.css"></head><body>
+<div id="hud"><span>You <b id="s0">0</b></span><span>CPU <b id="s1">0</b></span><span id="info">Kick 1</span><span>Best <b id="best">0</b></span></div>
+<div class="stage"><canvas id="c" width="480" height="520"></canvas>
+<div class="overlay" id="ov"><h1>⚽ Penalty Kings</h1><p id="msg">Best of 5 penalty shootout.<br><b>Shooting:</b> tap once to stop the sideways marker, tap again to stop the height marker.<br><b>Defending:</b> tap where you want your keeper to dive.</p><button class="btn" id="go" type="button">Kick off</button></div></div>
+<script src="game-base.js"></script>
+<script>
+(function () {
+  'use strict';
+  var cv = GB.$('c'), ctx = cv.getContext('2d'), W = 480, H = 520, FX = GB.particles(); GB.fit(cv);
+  var GX1 = 90, GX2 = 390, GY1 = 110, GY2 = 250, SPOT = { x: 240, y: 440 };
+  var s0 = GB.$('s0'), s1 = GB.$('s1'), info = GB.$('info'), bestEl = GB.$('best'), ov = GB.$('ov'), msg = GB.$('msg'), go = GB.$('go');
+  var kick, sc, res, phase, lockX, aimX, aimY, ball, keeper, popup, popT, saves, goals, timers = [], last = 0, running = false, cpuShot, defendTimer;
+  bestEl.textContent = GB.best();
+  function later(fn, ms) { var id = setTimeout(fn, ms); timers.push(id); return id; }
+  function reset() { timers.forEach(clearTimeout); timers = []; kick = 0; sc = [0, 0]; res = [[], []]; saves = 0; goals = 0; resetBall(); phase = 'idle'; popup = ''; hud(); }
+  function resetBall() { ball = { x: SPOT.x, y: SPOT.y, s: 1, vis: true, rot: 0 }; keeper = { x: 240, y: 232, tx: 240, ty: 232, rot: 0 }; }
+  function hud() { s0.textContent = sc[0]; s1.textContent = sc[1]; info.textContent = (kick % 2 === 0 ? '⚽ You shoot' : '🧤 You defend') + ' · Kick ' + (Math.floor(kick / 2) + 1); }
+  function begin() {
+    resetBall(); hud();
+    if (kick % 2 === 0) { phase = 'aimX'; aimStart = performance.now(); }
+    else { phase = 'defend'; defendTimer = later(function () { if (phase === 'defend') dive(240, 232); }, 3200); }
+  }
+  var aimStart = 0;
+  function speed() { return .0042 + Math.min(.004, Math.floor(kick / 2) * .0004); }
+  function curAim(t) { var k = (t - aimStart) * speed(); return { x: 60 + 360 * (.5 + .5 * Math.sin(k)), y: 80 + 200 * (.5 + .5 * Math.sin(k * 1.25 + 1)) }; }
+  function shoot(tx, ty) {
+    phase = 'shot'; var r = Math.floor(kick / 2);
+    var kx = GB.rand(125, 355), ky = GB.rand(170, 235);
+    if (Math.random() < .5) { kx = tx + GB.rand(-70, 70); ky = ty + GB.rand(-45, 45); kx = Math.max(120, Math.min(360, kx)); ky = Math.max(165, Math.min(238, ky)); }
+    keeper.tx = kx; keeper.ty = ky;
+    var inGoal = tx > GX1 + 4 && tx < GX2 - 4 && ty > GY1 + 4 && ty < GY2;
+    var near = tx > GX1 - 12 && tx < GX2 + 12 && ty > GY1 - 10 && ty < GY2 + 4;
+    var reachX = 50 + r * 2, reachY = 46 + r * 2, saved = inGoal && Math.abs(tx - kx) < reachX && Math.abs(ty - ky) < reachY;
+    var out = inGoal ? (saved ? 'SAVED!' : 'GOAL!') : (near ? 'POST!' : 'MISS!');
+    flight(tx, ty, out, 0);
+  }
+  function flight(tx, ty, out, who) {
+    var t0 = performance.now(), D = 620, sx = SPOT.x, sy = SPOT.y; GB.beep(160, .12, 'triangle', .08);
+    ball.fly = function (t) {
+      var k = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - k, 2);
+      ball.x = sx + (tx - sx) * e; ball.y = sy + (ty - sy) * e - Math.sin(k * Math.PI) * 26; ball.s = 1 - .58 * e; ball.rot += .35;
+      if (k >= 1) { ball.fly = null; resolve(out, who, tx, ty); }
+    };
+  }
+  function resolve(out, who, tx, ty) {
+    var goal = out === 'GOAL!', saved = out === 'SAVED!';
+    popup = out; popT = performance.now();
+    if (goal) { sc[who]++; FX.burst(tx, ty, '#ffd23f', 36); FX.burst(tx, ty, '#ffffff', 20); GB.beep(880, .25, 'square', .06); if (who === 0) goals++; }
+    else if (saved) { FX.burst(tx, ty, '#22d3ee', 22); GB.beep(200, .3, 'sawtooth', .07); if (who === 1) saves++; }
+    else GB.beep(130, .35, 'sawtooth', .06);
+    res[who].push(goal); hud();
+    later(afterKick, 1400);
+  }
+  function remaining(side) { return Math.max(0, 5 - res[side].length); }
+  function afterKick() {
+    kick++; popup = ''; var a = sc[0], b = sc[1];
+    if (kick < 10) { if (a > b + remaining(1) || b > a + remaining(0)) { return end(); } }
+    else if (kick % 2 === 0 && a !== b) return end();
+    begin();
+  }
+  function end() {
+    phase = 'over'; var win = sc[0] > sc[1], score = goals * 200 + saves * 100 + (win ? 300 : 0), nb = GB.saveBest(score); bestEl.textContent = GB.best(); GB.report(score);
+    if (win) GB.beep(1000, .5, 'square', .06);
+    ov.querySelector('h1').textContent = win ? '🏆 You win!' : (sc[0] === sc[1] ? 'Draw' : 'You lost');
+    msg.innerHTML = 'Final score <b>' + sc[0] + ' – ' + sc[1] + '</b><br>Goals <b>' + goals + '</b> · Saves <b>' + saves + '</b><br>Points <b>' + score + '</b>' + (nb ? ' · 🏆 New best!' : '');
+    go.textContent = 'Play again'; later(function () { ov.classList.remove('hidden'); }, 500);
+  }
+  function dive(x, y) {
+    if (phase !== 'defend') return; clearTimeout(defendTimer); phase = 'shot';
+    x = Math.max(GX1 + 20, Math.min(GX2 - 20, x)); y = Math.max(GY1 + 25, Math.min(GY2 - 12, y)); keeper.tx = x; keeper.ty = y;
+    var zones = [145, 240, 335], tx = zones[GB.ri(0, 2)] + GB.rand(-40, 40), ty = GB.rand(135, 240);
+    if (Math.random() < .12) { tx = Math.random() < .5 ? GX1 - 22 : GX2 + 22; ty = GB.rand(120, 200); }
+    var inGoal = tx > GX1 + 4 && tx < GX2 - 4 && ty > GY1 + 4 && ty < GY2, near = !inGoal && tx > GX1 - 30 && tx < GX2 + 30;
+    var saved = inGoal && Math.abs(tx - x) < 64 && Math.abs(ty - y) < 58;
+    var out = inGoal ? (saved ? 'SAVED!' : 'GOAL!') : (near ? 'POST!' : 'MISS!');
+    later(function () { flight(tx, ty, out, 1); }, 380);
+  }
+  function tap(e) {
+    if (!running) return; var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
+    if (phase === 'aimX') { lockX = curAim(performance.now()).x; aimX = lockX; phase = 'aimY'; aimStart = performance.now() - 300; GB.beep(600, .05, 'sine', .04); }
+    else if (phase === 'aimY') { var a = curAim(performance.now()); shoot(lockX, a.y); }
+    else if (phase === 'defend') dive(x, y);
+  }
+  function drawField(t) {
+    var g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0b1d3a'); g.addColorStop(.22, '#14427a'); g.addColorStop(.23, '#1f9d55'); g.addColorStop(1, '#0f6b38'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    for (var i = 0; i < 9; i++) { ctx.fillStyle = i % 2 ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.05)'; ctx.fillRect(0, 120 + i * 50, W, 50); }
+    for (i = 0; i < 40; i++) { ctx.fillStyle = 'hsl(' + (i * 47 % 360) + ',70%,60%)'; ctx.fillRect(i * 12 + (i % 3), 40 + (i * 13) % 50, 6, 6); }
+    ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fillRect(40, 270, 400, 3); ctx.fillRect(40, 270, 3, 250); ctx.fillRect(437, 270, 3, 250);
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(240, 560, 130, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(SPOT.x, SPOT.y + 12, 7, 3, 0, 0, 6.283); ctx.fill();
+  }
+  function drawGoal() {
+    ctx.fillStyle = 'rgba(8,10,30,.55)'; ctx.fillRect(GX1, GY1, GX2 - GX1, GY2 - GY1);
+    ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.lineWidth = 1; ctx.beginPath();
+    for (var x = GX1; x <= GX2; x += 15) { ctx.moveTo(x, GY1); ctx.lineTo(x, GY2); } for (var y = GY1; y <= GY2; y += 15) { ctx.moveTo(GX1, y); ctx.lineTo(GX2, y); } ctx.stroke();
+  }
+  function drawPosts() { ctx.strokeStyle = '#fff'; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(GX1, GY2); ctx.lineTo(GX1, GY1); ctx.lineTo(GX2, GY1); ctx.lineTo(GX2, GY2); ctx.stroke(); ctx.lineCap = 'butt'; }
+  function drawKeeper() {
+    ctx.save(); ctx.translate(keeper.x, keeper.y); ctx.rotate(keeper.rot);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(0, 36, 22, 6, 0, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#ffd23f'; ctx.fillRect(-14, -18, 28, 38); ctx.fillStyle = '#1b1b3a'; ctx.fillRect(-12, 20, 10, 16); ctx.fillRect(2, 20, 10, 16);
+    ctx.fillStyle = '#f2c9a0'; ctx.beginPath(); ctx.arc(0, -28, 11, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-14, -12); ctx.lineTo(-32, -24); ctx.moveTo(14, -12); ctx.lineTo(32, -24); ctx.stroke();
+    ctx.fillStyle = '#2ee59d'; ctx.beginPath(); ctx.arc(-34, -26, 7, 0, 6.283); ctx.arc(34, -26, 7, 0, 6.283); ctx.fill(); ctx.restore();
+  }
+  function drawBall() {
+    if (!ball.vis) return; var r = 15 * ball.s; ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(ball.x, SPOT.y + 14 - (SPOT.y - ball.y) * .15, r * .9, r * .35, 0, 0, 6.283); ctx.fill();
+    ctx.save(); ctx.translate(ball.x, ball.y); ctx.rotate(ball.rot); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.beginPath(); for (var i = 0; i < 5; i++) { var a = i * 1.2566 - 1.5708; ctx.lineTo(Math.cos(a) * r * .45, Math.sin(a) * r * .45); } ctx.closePath(); ctx.fill();
+    for (i = 0; i < 5; i++) { a = i * 1.2566 - 1.5708; ctx.beginPath(); ctx.arc(Math.cos(a) * r * .85, Math.sin(a) * r * .85, r * .18, 0, 6.283); ctx.fill(); } ctx.restore();
+  }
+  function drawDots() {
+    for (var s = 0; s < 2; s++) for (var i = 0; i < 5; i++) {
+      var x = s === 0 ? 20 + i * 20 : W - 20 - (4 - i) * 20, v = res[s][i]; ctx.beginPath(); ctx.arc(x, 18, 7, 0, 6.283);
+      ctx.fillStyle = v === undefined ? 'rgba(255,255,255,.25)' : (v ? '#2ee59d' : '#ff4d8d'); ctx.fill();
+    }
+  }
+  function drawAim(t) {
+    if (phase !== 'aimX' && phase !== 'aimY') return; var a = curAim(t);
+    ctx.save(); ctx.strokeStyle = '#ffd23f'; ctx.fillStyle = 'rgba(255,210,63,.25)'; ctx.lineWidth = 3; ctx.shadowColor = '#ffd23f'; ctx.shadowBlur = 14;
+    if (phase === 'aimX') { ctx.beginPath(); ctx.moveTo(a.x, 70); ctx.lineTo(a.x, 300); ctx.stroke(); ctx.fillRect(a.x - 3, 70, 6, 230); }
+    else { ctx.beginPath(); ctx.moveTo(lockX, 70); ctx.lineTo(lockX, 300); ctx.stroke(); ctx.beginPath(); ctx.moveTo(40, a.y); ctx.lineTo(440, a.y); ctx.stroke(); ctx.beginPath(); ctx.arc(lockX, a.y, 14, 0, 6.283); ctx.stroke(); }
+    ctx.restore(); ctx.fillStyle = '#fff'; ctx.font = '600 16px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(phase === 'aimX' ? 'Tap to lock SIDE' : 'Tap to lock HEIGHT', W / 2, 335);
+  }
+  function loop(t) {
+    requestAnimationFrame(loop); var dt = Math.min(50, t - (last || t)); last = t; var k = dt / 16.67;
+    keeper.x += (keeper.tx - keeper.x) * Math.min(1, .16 * k); keeper.y += (keeper.ty - keeper.y) * Math.min(1, .16 * k); keeper.rot = (keeper.x - 240) / 150 * .8 * Math.min(1, Math.abs(keeper.tx - keeper.x) > 3 || phase === 'shot' ? 1 : 0);
+    if (ball.fly) ball.fly(t);
+    drawField(t); drawGoal(); drawKeeper(); drawPosts(); drawBall(); FX.draw(ctx, k); drawDots(); drawAim(t);
+    if (phase === 'defend') { ctx.fillStyle = '#fff'; ctx.font = '600 18px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🧤 Tap where your keeper should dive!', W / 2, 335); }
+    if (popup) { var p = Math.min(1, (t - popT) / 250); ctx.save(); ctx.translate(W / 2, 360); ctx.scale(.6 + p * .6, .6 + p * .6); ctx.font = '700 52px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.lineWidth = 8; ctx.strokeStyle = '#1b1050'; ctx.strokeText(popup, 0, 0); ctx.fillStyle = popup === 'GOAL!' ? '#ffd23f' : (popup === 'SAVED!' ? '#22d3ee' : '#ff4d8d'); ctx.fillText(popup, 0, 0); ctx.restore(); }
+  }
+  function start() { reset(); running = true; ov.classList.add('hidden'); later(begin, 300); }
+  cv.addEventListener('pointerdown', function (e) { e.preventDefault(); tap(e); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!ov.classList.contains('hidden')) start(); else if (phase === 'aimX' || phase === 'aimY') tap({ clientX: 0, clientY: 0 }); }
+    if (phase === 'defend') { var m = { ArrowLeft: [145, 200], ArrowRight: [335, 200], ArrowUp: [240, 150], ArrowDown: [240, 235] }[e.key]; if (m) dive(m[0], m[1]); }
+  });
+  go.addEventListener('click', start);
+  reset(); requestAnimationFrame(loop);
+})();
+</script></body></html>

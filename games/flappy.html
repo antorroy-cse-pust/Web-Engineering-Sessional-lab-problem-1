@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Flappy Orb</title><link rel="stylesheet" href="game-base.css"></head><body>
+<div id="hud"><span>Score <b id="score">0</b></span><span>Best <b id="best">0</b></span></div>
+<div class="stage"><canvas id="c" width="360" height="560"></canvas>
+<div class="overlay" id="ov"><h1>🔮 Flappy Orb</h1><p id="msg">Tap, click or press Space to flap.<br>Glide through the crystal gaps!</p><button class="btn" id="go" type="button">Play</button></div></div>
+<script src="game-base.js"></script>
+<script>
+(function () {
+  'use strict';
+  var cv = GB.$('c'), ctx = cv.getContext('2d'), W = cv.width, H = cv.height, FX = GB.particles(); GB.fit(cv);
+  var scoreEl = GB.$('score'), bestEl = GB.$('best'), ov = GB.$('ov'), msg = GB.$('msg'), go = GB.$('go');
+  var y, vy, pipes, score, running = false, last = 0, nextX, bgOff = 0, tilt = 0, started = false;
+  bestEl.textContent = GB.best();
+  function reset() { y = H / 2; vy = 0; pipes = []; score = 0; nextX = W + 40; scoreEl.textContent = 0; started = false; }
+  function flap() { if (!running) return; started = true; vy = -7.2; GB.beep(620, .07, 'sine', .04); FX.burst(70, y + 10, 'rgba(255,255,255,.8)', 4); }
+  function die() {
+    running = false; GB.beep(110, .5, 'sawtooth', .08); FX.burst(70, y, '#f093fb', 34);
+    var nb = GB.saveBest(score); bestEl.textContent = GB.best(); GB.report(score);
+    setTimeout(function () { msg.innerHTML = 'Crashed! 💫<br>Score <b>' + score + '</b>' + (nb ? ' · 🏆 New best!' : ''); go.textContent = 'Fly again'; ov.classList.remove('hidden'); }, 600);
+  }
+  function update(k) {
+    bgOff = (bgOff + .6 * k) % W;
+    if (!started) { y = H / 2 + Math.sin(performance.now() / 220) * 8; return; }
+    vy += .42 * k; y += vy * k; tilt = Math.max(-.5, Math.min(1.1, vy / 9));
+    var sp = 2.6 + Math.min(1.4, score * .05);
+    nextX -= sp * k; if (nextX <= W - 205 || !pipes.length) { var gap = Math.max(128, 160 - score * 1.2); pipes.push({ x: W + 30, gy: GB.rand(130, H - 130 - gap / 2), gap: gap, pass: false }); nextX = W + 30; }
+    pipes.forEach(function (p) { p.x -= sp * k; if (!p.pass && p.x + 26 < 70) { p.pass = true; score++; scoreEl.textContent = score; GB.beep(880, .08, 'triangle', .04); } });
+    pipes = pipes.filter(function (p) { return p.x > -70; });
+    if (y > H - 38 || y < 12) { die(); return; }
+    for (var i = 0; i < pipes.length; i++) { var p = pipes[i]; if (70 + 13 > p.x - 26 && 70 - 13 < p.x + 26 && (y - 13 < p.gy - p.gap / 2 || y + 13 > p.gy + p.gap / 2)) { die(); return; } }
+  }
+  function draw(k) {
+    var g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1a1050'); g.addColorStop(1, '#3a1470'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    for (var s = 0; s < 22; s++) { var sx = (s * 97 - bgOff * (s % 3 + 1) * .5 + W * 3) % W; ctx.fillStyle = 'rgba(255,255,255,' + (.2 + (s % 4) * .12) + ')'; ctx.fillRect(sx, (s * 53) % (H - 80), 2, 2); }
+    ctx.fillStyle = 'rgba(124,92,255,.25)'; ctx.beginPath(); ctx.moveTo(0, H - 40); for (var x = 0; x <= W; x += 20) ctx.lineTo(x, H - 70 - Math.sin((x + bgOff * 3) / 40) * 18 - 14); ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.fill();
+    pipes.forEach(function (p) {
+      ctx.save(); ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 14; var pg = ctx.createLinearGradient(p.x - 26, 0, p.x + 26, 0); pg.addColorStop(0, '#0e7490'); pg.addColorStop(.5, '#67e8f9'); pg.addColorStop(1, '#0e7490'); ctx.fillStyle = pg;
+      ctx.fillRect(p.x - 26, 0, 52, p.gy - p.gap / 2); ctx.fillRect(p.x - 32, p.gy - p.gap / 2 - 18, 64, 18);
+      ctx.fillRect(p.x - 26, p.gy + p.gap / 2, 52, H); ctx.fillRect(p.x - 32, p.gy + p.gap / 2, 64, 18); ctx.restore();
+    });
+    ctx.fillStyle = '#2a1760'; ctx.fillRect(0, H - 26, W, 26); ctx.fillStyle = '#f093fb'; ctx.fillRect(0, H - 26, W, 3);
+    if (running || FX) { ctx.save(); ctx.translate(70, y); ctx.rotate(tilt); ctx.shadowColor = '#f093fb'; ctx.shadowBlur = 22; var og = ctx.createRadialGradient(-4, -4, 2, 0, 0, 15); og.addColorStop(0, '#fff'); og.addColorStop(.4, '#f093fb'); og.addColorStop(1, '#f5576c'); ctx.fillStyle = og; if (running || started) { ctx.beginPath(); ctx.arc(0, 0, 14, 0, 6.283); ctx.fill(); } ctx.restore(); }
+    FX.draw(ctx, k);
+    if (running && !started) { ctx.fillStyle = '#fff'; ctx.font = '600 20px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Tap to flap!', W / 2, H / 2 + 80); }
+  }
+  function loop(t) { requestAnimationFrame(loop); var dt = Math.min(50, t - (last || t)); last = t; var k = dt / 16.67; if (running) update(k); draw(k); }
+  function start() { reset(); running = true; ov.classList.add('hidden'); }
+  cv.addEventListener('pointerdown', function (e) { e.preventDefault(); flap(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w') { e.preventDefault(); if (running) flap(); else if (!ov.classList.contains('hidden')) start(); }
+  });
+  go.addEventListener('click', start);
+  reset(); requestAnimationFrame(loop);
+})();
+</script></body></html>

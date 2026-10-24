@@ -1,0 +1,69 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Slide Master</title><link rel="stylesheet" href="game-base.css">
+<style>
+.board{position:relative;width:min(94vw,calc(100vh - 130px),440px);aspect-ratio:1;background:#2a2466;border-radius:16px;box-shadow:0 0 0 2px rgba(124,92,255,.55),0 0 44px rgba(124,92,255,.35)}
+.tile{position:absolute;left:0;top:0;width:calc(100% / var(--n));height:calc(100% / var(--n));padding:4px;transform:translate(calc(var(--c) * 100%),calc(var(--r) * 100%));transition:transform .16s ease-out}
+.tile button{width:100%;height:100%;border:0;border-radius:12px;cursor:pointer;font:inherit;font-weight:700;font-size:clamp(18px,7vw,34px);color:#fff;background:linear-gradient(135deg,hsl(var(--h),85%,58%),hsl(calc(var(--h) + 40),85%,50%));box-shadow:inset 0 -4px 0 rgba(0,0,0,.2),0 4px 10px rgba(0,0,0,.3);transition:filter .15s}
+.tile button:hover{filter:brightness(1.15)}
+.sizes{display:flex;gap:6px}.sizes .btn.sm.on{background:#7c5cff}
+.stage{border-radius:16px}.overlay{border-radius:16px}
+</style></head><body>
+<div id="hud"><span>Moves <b id="moves">0</b></span><span>Time <b id="time">0</b>s</span><span>Best <b id="best">0</b></span>
+<span class="sizes" id="sizes"><button class="btn sm" data-n="3" type="button">3×3</button><button class="btn sm on" data-n="4" type="button">4×4</button><button class="btn sm" data-n="5" type="button">5×5</button></span>
+<button class="btn sm" id="shuf" type="button">Shuffle</button></div>
+<div class="stage"><div class="board" id="board"></div>
+<div class="overlay hidden" id="ov"><h1>🎉 Solved!</h1><p id="msg"></p><button class="btn" id="go" type="button">Play again</button></div></div>
+<script src="game-base.js"></script>
+<script>
+(function () {
+  'use strict';
+  var boardEl = GB.$('board'), movesEl = GB.$('moves'), timeEl = GB.$('time'), bestEl = GB.$('best'), ov = GB.$('ov'), msg = GB.$('msg');
+  var n = 4, tiles, er, ec, moves, secs, timer = null, solved = true, els = {};
+  bestEl.textContent = GB.best();
+  function build() {
+    clearInterval(timer); timer = null; moves = 0; secs = 0; solved = false; movesEl.textContent = 0; timeEl.textContent = 0; ov.classList.add('hidden');
+    boardEl.style.setProperty('--n', n); boardEl.innerHTML = ''; els = {}; tiles = [];
+    for (var r = 0; r < n; r++) { tiles.push([]); for (var c = 0; c < n; c++) tiles[r].push(r * n + c + 1); }
+    tiles[n - 1][n - 1] = 0; er = n - 1; ec = n - 1;
+    for (r = 0; r < n; r++) for (c = 0; c < n; c++) { var v = tiles[r][c]; if (!v) continue; mk(v); }
+    // shuffle by legal random moves (always solvable)
+    var prev = null, steps = n * n * 22;
+    for (var i = 0; i < steps; i++) {
+      var o = [[-1, 0], [1, 0], [0, -1], [0, 1]].filter(function (d) { var rr = er + d[0], cc = ec + d[1]; return rr >= 0 && cc >= 0 && rr < n && cc < n && !(prev && d[0] === -prev[0] && d[1] === -prev[1]); });
+      var d = o[GB.ri(0, o.length - 1)]; swap(er + d[0], ec + d[1]); prev = d;
+    }
+    if (isSolved()) { swap(er, ec - 1 >= 0 ? ec - 1 : ec); }
+    place();
+  }
+  function mk(v) {
+    var w = document.createElement('div'), b = document.createElement('button'); w.className = 'tile'; b.type = 'button'; b.textContent = v; b.setAttribute('aria-label', 'Tile ' + v);
+    w.style.setProperty('--h', Math.round(v / (n * n) * 300)); w.appendChild(b); boardEl.appendChild(w); els[v] = w;
+    b.addEventListener('click', function () { clickTile(v); });
+  }
+  function swap(r, c) { tiles[er][ec] = tiles[r][c]; tiles[r][c] = 0; er = r; ec = c; }
+  function place() { for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) { var v = tiles[r][c]; if (v) { els[v].style.setProperty('--r', r); els[v].style.setProperty('--c', c); } } }
+  function isSolved() { for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) { var want = (r === n - 1 && c === n - 1) ? 0 : r * n + c + 1; if (tiles[r][c] !== want) return false; } return true; }
+  function tryMove(r, c) {
+    if (solved) return; if (Math.abs(r - er) + Math.abs(c - ec) !== 1) return;
+    if (!timer) timer = setInterval(function () { secs++; timeEl.textContent = secs; }, 1000);
+    swap(r, c); moves++; movesEl.textContent = moves; place(); GB.beep(380, .04, 'triangle', .04);
+    if (isSolved()) win();
+  }
+  function clickTile(v) { for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (tiles[r][c] === v) { tryMove(r, c); return; } }
+  function win() {
+    solved = true; clearInterval(timer); timer = null;
+    var score = Math.max(50, n * n * 100 - moves * 4 - secs * 3), nb = GB.saveBest(score); bestEl.textContent = GB.best(); GB.report(score); GB.beep(988, .4, 'square', .05);
+    msg.innerHTML = 'Moves <b>' + moves + '</b> · Time <b>' + secs + 's</b><br>Score <b>' + score + '</b>' + (nb ? ' · 🏆 New best!' : '');
+    setTimeout(function () { ov.classList.remove('hidden'); }, 500);
+  }
+  document.addEventListener('keydown', function (e) {
+    var m = { ArrowUp: [1, 0], ArrowDown: [-1, 0], ArrowLeft: [0, 1], ArrowRight: [0, -1], w: [1, 0], s: [-1, 0], a: [0, 1], d: [0, -1] }[e.key];
+    if (!m) return; e.preventDefault(); var r = er + m[0], c = ec + m[1]; if (r >= 0 && c >= 0 && r < n && c < n) tryMove(r, c);
+  });
+  GB.$('sizes').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-n]'); if (!b) return; n = +b.getAttribute('data-n');
+    Array.prototype.forEach.call(GB.$('sizes').children, function (x) { x.classList.toggle('on', x === b); }); build();
+  });
+  GB.$('shuf').addEventListener('click', build); GB.$('go').addEventListener('click', build);
+  build();
+})();
+</script></body></html>

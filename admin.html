@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin – Game Manager – PlayNova</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#0c0a1f">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%237c5cff'/%3E%3Ctext x='32' y='46' font-size='34' text-anchor='middle'%3E🎮%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="site-header"></div>
+
+<main class="wrap" id="main">
+  <!-- login gate -->
+  <section id="gate" class="card gate">
+    <div class="big">🔐</div>
+    <h1 style="font-size:1.8rem;margin:8px 0">Admin login</h1>
+    <p style="color:var(--muted)">Enter the admin passcode to manage games.<br><small>Default passcode: <code>playnova</code> (change it in Settings).</small></p>
+    <form id="loginForm" novalidate>
+      <div class="field"><input id="pass" type="password" placeholder="Passcode" autocomplete="current-password" aria-label="Passcode"></div>
+      <p class="err" id="loginErr" role="alert"></p>
+      <button class="btn btn-primary" type="submit">Unlock 🔓</button>
+    </form>
+  </section>
+
+  <!-- dashboard -->
+  <div id="app" hidden>
+    <div class="admin-top">
+      <h1>🎛️ Game Manager</h1>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="addBtn" type="button">＋ Add game</button>
+        <a class="btn" href="index.html" target="_blank" rel="noopener">View site ↗</a>
+        <button class="btn btn-ghost" id="logout" type="button">Log out</button>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs" role="tablist">
+      <button class="tab on" data-tab="dash" type="button">📊 Dashboard</button>
+      <button class="tab" data-tab="games" type="button">🎮 Games</button>
+      <button class="tab" data-tab="settings" type="button">⚙️ Settings &amp; Ads</button>
+      <button class="tab" data-tab="inbox" type="button">📬 Messages</button>
+      <button class="tab" data-tab="data" type="button">💾 Backup</button>
+    </div>
+
+    <section data-pane="dash">
+      <div class="kpis" id="kpis"></div>
+      <div class="card"><h3>Plays per game</h3><div class="bars" id="bars"></div></div>
+    </section>
+
+    <section data-pane="games" hidden>
+      <div class="toolrow">
+        <input type="search" id="gSearch" placeholder="Filter games…" aria-label="Filter games">
+        <select id="gCat" class="select" aria-label="Filter by category"></select>
+      </div>
+      <div class="table-wrap"><table class="tbl">
+        <thead><tr><th></th><th>Game</th><th>Category</th><th>Featured</th><th>Popular</th><th>New</th><th>Plays</th><th>Actions</th></tr></thead>
+        <tbody id="gBody"></tbody></table></div>
+      <p style="color:var(--muted);font-size:.9rem">Tip: the order here is the order games appear on the site. Clear the filters to enable the ▲ ▼ buttons.</p>
+    </section>
+
+    <section data-pane="settings" hidden>
+      <div class="card" style="margin-bottom:16px">
+        <h3>📢 Advertising</h3>
+        <label class="sw-row" style="display:flex;align-items:center;gap:12px">
+          <span class="sw"><input type="checkbox" id="adsToggle"><i></i></span> Show advertising placements
+        </label>
+        <p style="color:var(--muted)">When you are approved by an ad network, paste your client id and slot ids into <code>assets/js/data.js</code> (<code>PN_ADS</code>). Placeholders become real ads automatically – no other change needed.</p>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <h3>🎮 Where to get more free &amp; modern games (legally)</h3>
+        <ul style="color:var(--muted);line-height:1.8;margin:0;padding-left:20px">
+          <li><b>GameDistribution</b> and <b>GameMonetize</b> – publisher programmes with thousands of HTML5 games; you copy an embed code and (optionally) share ad revenue.</li>
+          <li><b>itch.io</b> – many creators allow embedding; check each game’s page and licence.</li>
+          <li><b>GitHub open-source games</b> – check the licence (MIT / CC0 are easiest), host them in <code>games/</code> and credit the author.</li>
+        </ul>
+        <p style="color:var(--muted)">Then click <b>＋ Add game</b> and paste the embed code in the Quick add box. Only add games you have permission to use.</p>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <h3>🗂️ Categories</h3>
+        <p style="color:var(--muted)">Built-in: Puzzle, Action, Racing, Arcade, Adventure, Brain Training.</p>
+        <div id="customCats" class="tags" style="margin-bottom:10px"></div>
+        <form id="catForm" class="wait"><input id="newCat" maxlength="24" placeholder="New category name" aria-label="New category"><button class="btn btn-primary btn-sm" type="submit">Add category</button></form>
+      </div>
+      <div class="card">
+        <h3>🔑 Change admin passcode</h3>
+        <form id="passForm" class="wait"><input id="newPass" type="password" minlength="6" placeholder="New passcode (min 6 chars)" autocomplete="new-password" aria-label="New passcode"><button class="btn btn-primary btn-sm" type="submit">Save passcode</button></form>
+        <p style="color:var(--muted);font-size:.9rem">This demo stores the passcode in the browser. In production, protect admin pages with real server-side authentication.</p>
+      </div>
+    </section>
+
+    <section data-pane="inbox" hidden><div id="inbox"></div></section>
+
+    <section data-pane="data" hidden>
+      <div class="card" style="margin-bottom:16px"><h3>Export / import</h3>
+        <p style="color:var(--muted)">Download your game list as JSON, or load one you saved earlier.</p>
+        <div class="toolrow"><button class="btn btn-primary" id="exportBtn" type="button">⬇ Export games</button>
+          <label class="btn" style="cursor:pointer">⬆ Import games<input type="file" id="importFile" accept="application/json,.json" hidden></label></div></div>
+      <div class="card"><h3>Reset</h3>
+        <div class="toolrow"><button class="btn btn-danger" id="resetGames" type="button">Restore default games</button>
+          <button class="btn btn-danger" id="clearScores" type="button">Clear all leaderboard scores</button></div></div>
+    </section>
+  </div>
+</main>
+
+<!-- add / edit game dialog -->
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="modal-box">
+    <h2 id="mTitle" style="margin-bottom:14px">Add game</h2>
+    <form id="gForm" novalidate>
+      <div class="preview" id="pv"></div>
+      <div class="field full" style="background:rgba(124,92,255,.12);border:1px dashed var(--p);border-radius:16px;padding:12px">
+        <label for="f_embed">⚡ Quick add: paste an embed code or game URL</label>
+        <textarea id="f_embed" style="min-height:64px" placeholder='<iframe src="https://…" width="800" height="600"></iframe>   or   https://…/index.html'></textarea>
+        <small>Works with GameDistribution, GameMonetize, itch.io (when the author allows embedding) and any open-licence HTML5 game you host. Source and title fill in automatically.</small>
+      </div>
+      <div class="form-grid">
+        <div class="field"><label for="f_title">Title *</label><input id="f_title" maxlength="60"></div>
+        <div class="field"><label for="f_id">URL id (slug) *</label><input id="f_id" maxlength="50"><small>Lowercase letters, numbers, dashes</small></div>
+        <div class="field"><label for="f_cat">Category *</label><select id="f_cat"></select></div>
+        <div class="field"><label for="f_type">Source type</label><select id="f_type"><option value="local">Hosted on my site (games/ folder)</option><option value="embed">Embed from another site (URL)</option></select></div>
+        <div class="field full"><label for="f_src">Game address *</label><input id="f_src" placeholder="games/my-game.html  or  https://…/index.html"><small>Only embed games you own or have permission/licence to use.</small></div>
+        <div class="field"><label for="f_icon">Icon (emoji)</label><input id="f_icon" maxlength="6" value="🎮"></div>
+        <div class="field"><label for="f_thumb">Thumbnail image URL (optional)</label><input id="f_thumb" placeholder="https://…/thumb.jpg"></div>
+        <div class="field"><label for="f_c1">Colour 1</label><input id="f_c1" type="color" value="#7c5cff"></div>
+        <div class="field"><label for="f_c2">Colour 2</label><input id="f_c2" type="color" value="#22d3ee"></div>
+        <div class="field full"><label for="f_desc">Description</label><textarea id="f_desc" maxlength="400" style="min-height:80px"></textarea></div>
+        <div class="field"><label for="f_controls">Controls / how to play</label><input id="f_controls" maxlength="160"></div>
+        <div class="field"><label for="f_tags">Tags (comma separated)</label><input id="f_tags" placeholder="racing, cars, speed"></div>
+        <div class="field"><label for="f_rating">Rating (1–5)</label><input id="f_rating" type="number" min="1" max="5" step="0.1" value="4.5"></div>
+      </div>
+      <div class="checks">
+        <label><input type="checkbox" id="f_featured"> ⭐ Featured (hero banner)</label>
+        <label><input type="checkbox" id="f_popular"> 🔥 Popular</label>
+        <label><input type="checkbox" id="f_new"> 🆕 New</label>
+      </div>
+      <p class="err" id="fErr" role="alert"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+        <button class="btn btn-ghost" type="button" id="testBtn">Test address ↗</button>
+        <button class="btn" type="button" id="cancelBtn">Cancel</button>
+        <button class="btn btn-primary" type="submit" id="saveBtn">Save game</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="site-footer"></div>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/admin.js"></script>
+</body>
+</html>

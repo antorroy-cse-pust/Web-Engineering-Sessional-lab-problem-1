@@ -1,0 +1,167 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Ludo Classic</title><link rel="stylesheet" href="game-base.css">
+<style>
+#die{font-size:40px;line-height:1;display:inline-block;min-width:44px;text-align:center;color:#fff;filter:drop-shadow(0 0 8px rgba(255,255,255,.5))}
+#die.roll{animation:spin .5s linear}
+@keyframes spin{to{transform:rotate(360deg) scale(1.2)}}
+#st{min-width:150px;font-weight:600}
+#roll[disabled]{opacity:.4;cursor:not-allowed}
+</style></head><body>
+<div id="hud"><span id="st">Your turn</span><button class="btn sm" id="roll" type="button">🎲 Roll</button><span id="die">⚀</span></div>
+<div class="stage"><canvas id="c" width="600" height="600"></canvas>
+<div class="overlay" id="ov"><h1>🎲 Ludo Classic</h1><p id="msg">You are <b style="color:#ff4d4d">Red</b>. Roll a <b>6</b> to leave home, race all 4 pieces round the board and into the centre.<br>Land on rivals to send them home. ★ and coloured start squares are safe.</p><button class="btn" id="go" type="button">Play</button></div></div>
+<script src="game-base.js"></script>
+<script>
+(function () {
+  'use strict';
+  var cv = GB.$('c'), ctx = cv.getContext('2d'), CS = 40, SZ = 600; GB.fit(cv, 96);
+  var COL = ['#ff4d4d', '#2ee59d', '#ffd23f', '#22d3ee'], NAME = ['You', 'Green', 'Yellow', 'Blue'], FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+  var SAFE = [0, 13, 26, 39, 8, 21, 34, 47];
+  var TRACK = [];
+  function seg(r, c, dr, dc, n) { for (var i = 0; i < n; i++) TRACK.push([r + dr * i, c + dc * i]); }
+  seg(6, 1, 0, 1, 5); seg(5, 6, -1, 0, 6); seg(0, 7, 0, 1, 2); seg(1, 8, 1, 0, 5); seg(6, 9, 0, 1, 6); seg(7, 14, 1, 0, 2);
+  seg(8, 13, 0, -1, 5); seg(9, 8, 1, 0, 6); seg(14, 7, 0, -1, 2); seg(13, 6, -1, 0, 5); seg(8, 5, 0, -1, 6); seg(7, 0, -1, 0, 2);
+  var HC = [[[7, 1], [7, 2], [7, 3], [7, 4], [7, 5]], [[1, 7], [2, 7], [3, 7], [4, 7], [5, 7]], [[7, 13], [7, 12], [7, 11], [7, 10], [7, 9]], [[13, 7], [12, 7], [11, 7], [10, 7], [9, 7]]];
+  var YARD = [[[2, 2], [2, 4], [4, 2], [4, 4]], [[2, 10], [2, 12], [4, 10], [4, 12]], [[10, 10], [10, 12], [12, 10], [12, 12]], [[10, 2], [10, 4], [12, 2], [12, 4]]];
+  var CENTER_OFF = [[-.8, 0], [0, -.8], [.8, 0], [0, .8]];
+  var FX = GB.particles();
+  var st = GB.$('st'), rollBtn = GB.$('roll'), dieEl = GB.$('die'), ov = GB.$('ov'), msg = GB.$('msg'), go = GB.$('go');
+  var pieces, turn, dice, phase, movable, sixes, caps, over, autoHuman = false, last = 0, hint = 0;
+
+  function reset() {
+    pieces = []; for (var p = 0; p < 4; p++) { pieces.push([]); for (var i = 0; i < 4; i++) { var y = YARD[p][i]; pieces[p].push({ pos: -1, x: y[1] * CS, y: y[0] * CS, tx: y[1] * CS, ty: y[0] * CS }); } }
+    turn = 0; dice = 0; phase = 'roll'; movable = []; sixes = 0; caps = 0; over = false; dieEl.textContent = FACES[0]; setStatus(); rollBtn.disabled = false;
+  }
+  function setStatus(t) { st.textContent = t || (turn === 0 ? 'Your turn – roll!' : NAME[turn] + ' is playing…'); st.style.color = COL[turn]; }
+  function absIdx(p, pos) { return (p * 13 + pos) % 52; }
+  function target(p, i) {
+    var s = pieces[p][i], c;
+    if (s.pos < 0) { c = YARD[p][i]; return { x: c[1] * CS, y: c[0] * CS }; }
+    if (s.pos <= 50) { c = TRACK[absIdx(p, s.pos)]; return { x: (c[1] + .5) * CS, y: (c[0] + .5) * CS }; }
+    if (s.pos <= 55) { c = HC[p][s.pos - 51]; return { x: (c[1] + .5) * CS, y: (c[0] + .5) * CS }; }
+    var o = CENTER_OFF[p]; return { x: 7.5 * CS + o[1] * CS * .55 + (i % 2 - .5) * 8, y: 7.5 * CS + o[0] * CS * .55 + (Math.floor(i / 2) - .5) * 8 };
+  }
+  function getMovable(p, d) {
+    var m = []; for (var i = 0; i < 4; i++) { var s = pieces[p][i]; if ((s.pos < 0 && d === 6) || (s.pos >= 0 && s.pos + d <= 56)) m.push(i); } return m;
+  }
+  function rollDice() {
+    if (phase !== 'roll' || over) return; phase = 'anim'; rollBtn.disabled = true; dieEl.classList.add('roll'); var n = 0;
+    var iv = setInterval(function () {
+      dieEl.textContent = FACES[GB.ri(0, 5)]; GB.beep(300 + n * 30, .03, 'square', .02);
+      if (++n >= 9) { clearInterval(iv); dieEl.classList.remove('roll'); dice = GB.ri(1, 6); dieEl.textContent = FACES[dice - 1]; GB.beep(700, .1, 'triangle', .05); afterRoll(); }
+    }, 55);
+  }
+  function isCpu() { return turn !== 0 || autoHuman; }
+  function afterRoll() {
+    movable = getMovable(turn, dice);
+    if (dice === 6) sixes++;
+    if (!movable.length) { setStatus((turn === 0 ? 'No move' : NAME[turn] + ': no move') + ' (' + dice + ')'); setTimeout(function () { endMove(false); }, 900); return; }
+    if (!isCpu() && movable.length > 1) { phase = 'pick'; setStatus('Pick a piece to move ' + dice); return; }
+    var i = isCpu() ? cpuPick() : movable[0];
+    setTimeout(function () { movePiece(turn, i, dice); }, isCpu() ? 650 : 280);
+  }
+  function cpuPick() {
+    var best = -1, bs = -1e9;
+    movable.forEach(function (i) {
+      var s = pieces[turn][i], np = s.pos < 0 ? 0 : s.pos + dice, sc = np / 10 + Math.random();
+      if (np === 56) sc += 100;
+      if (s.pos < 0) sc += 60;
+      if (np <= 50) {
+        var a = absIdx(turn, np);
+        if (SAFE.indexOf(a) > -1) sc += 20;
+        else for (var q = 0; q < 4; q++) if (q !== turn) pieces[q].forEach(function (o) { if (o.pos >= 0 && o.pos <= 50 && absIdx(q, o.pos) === a) sc += 80; });
+      }
+      if (sc > bs) { bs = sc; best = i; }
+    });
+    return best;
+  }
+  function movePiece(p, i, d) {
+    phase = 'anim'; var s = pieces[p][i], list = [];
+    if (s.pos < 0) list.push(0); else for (var k = 1; k <= d; k++) list.push(s.pos + k);
+    var n = 0;
+    (function step() {
+      s.pos = list[n]; GB.beep(420 + n * 25, .05, 'triangle', .04); n++;
+      if (n < list.length) setTimeout(step, 150); else setTimeout(land, 220);
+    })();
+    function land() {
+      var captured = false;
+      if (s.pos <= 50) {
+        var a = absIdx(p, s.pos);
+        if (SAFE.indexOf(a) < 0) for (var q = 0; q < 4; q++) if (q !== p) pieces[q].forEach(function (o, oi) {
+          if (o.pos >= 0 && o.pos <= 50 && absIdx(q, o.pos) === a) { o.pos = -1; captured = true; if (p === 0) caps++; var t = target(q, oi); FX.burst(s.x, s.y, COL[q], 22); GB.beep(120, .35, 'sawtooth', .07); }
+        });
+      }
+      var home = s.pos === 56; if (home) { GB.beep(1000, .3, 'square', .05); FX.burst(7.5 * CS, 7.5 * CS, COL[p], 26); }
+      if (pieces[p].every(function (x) { return x.pos === 56; })) { finish(p); return; }
+      endMove(d === 6 || captured || home);
+    }
+  }
+  function endMove(extra) {
+    if (over) return;
+    if (extra && sixes >= 3) { extra = false; }
+    if (!extra) { turn = (turn + 1) % 4; sixes = 0; }
+    phase = 'roll'; movable = []; setStatus();
+    if (isCpu()) { rollBtn.disabled = true; setTimeout(rollDice, 750); } else rollBtn.disabled = false;
+  }
+  function finish(p) {
+    over = true; phase = 'over'; var homeCount = pieces[0].filter(function (x) { return x.pos === 56; }).length;
+    var score = homeCount * 150 + caps * 50 + (p === 0 ? 500 : 0), nb = GB.saveBest(score); GB.report(score);
+    if (p === 0) GB.beep(988, .5, 'square', .06);
+    msg.innerHTML = (p === 0 ? '🏆 <b>You win!</b>' : '<b style="color:' + COL[p] + '">' + NAME[p] + '</b> wins this time.') + '<br>Pieces home: <b>' + homeCount + '</b> · Captures: <b>' + caps + '</b><br>Score <b>' + score + '</b>' + (nb ? ' · New best!' : '');
+    ov.querySelector('h1').textContent = p === 0 ? '🎉 Victory!' : 'Game over'; go.textContent = 'Play again'; setTimeout(function () { ov.classList.remove('hidden'); }, 900);
+  }
+  function start() { reset(); ov.classList.add('hidden'); }
+  function rr(x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); ctx.fill(); }
+
+  function drawBoard(t) {
+    ctx.fillStyle = '#0e0b2b'; ctx.fillRect(0, 0, SZ, SZ);
+    [[0, 0], [0, 9], [9, 9], [9, 0]].forEach(function (o, p) {
+      ctx.fillStyle = COL[p]; ctx.globalAlpha = (turn === p && !over) ? .55 + Math.sin(t / 220) * .25 : .85; rr(o[1] * CS + 2, o[0] * CS + 2, 6 * CS - 4, 6 * CS - 4, 16); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#17133f'; rr((o[1] + 1) * CS, (o[0] + 1) * CS, 4 * CS, 4 * CS, 12);
+      YARD[p].forEach(function (y) { ctx.beginPath(); ctx.arc(y[1] * CS, y[0] * CS, 15, 0, 6.283); ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fill(); ctx.strokeStyle = COL[p]; ctx.globalAlpha = .5; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1; });
+    });
+    TRACK.forEach(function (c, k) {
+      ctx.fillStyle = k % 13 === 0 ? COL[k / 13] : '#ece9ff'; rr(c[1] * CS + 1.5, c[0] * CS + 1.5, CS - 3, CS - 3, 6);
+      if (SAFE.indexOf(k) > -1 && k % 13 !== 0) { ctx.fillStyle = '#7c5cff'; ctx.font = '22px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('★', (c[1] + .5) * CS, (c[0] + .55) * CS); }
+      if (k % 13 === 0) { ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('▶', (c[1] + .5) * CS, (c[0] + .55) * CS); }
+    });
+    HC.forEach(function (col, p) { col.forEach(function (c) { ctx.fillStyle = COL[p]; ctx.globalAlpha = .9; rr(c[1] * CS + 1.5, c[0] * CS + 1.5, CS - 3, CS - 3, 6); ctx.globalAlpha = 1; }); });
+    var tri = [[[6, 6], [6, 9], [7.5, 7.5]], [[6, 6], [9, 6], [7.5, 7.5]], [[9, 6], [9, 9], [7.5, 7.5]], [[6, 9], [9, 9], [7.5, 7.5]]];
+    tri.forEach(function (T, p) { ctx.fillStyle = COL[p]; ctx.beginPath(); ctx.moveTo(T[0][0] * CS, T[0][1] * CS); ctx.lineTo(T[1][0] * CS, T[1][1] * CS); ctx.lineTo(T[2][0] * CS, T[2][1] * CS); ctx.closePath(); ctx.fill(); });
+  }
+  function updateTargets() {
+    var groups = {};
+    for (var p = 0; p < 4; p++) for (var i = 0; i < 4; i++) { var s = pieces[p][i], t = target(p, i); s.bx = t.x; s.by = t.y; if (s.pos >= 0 && s.pos < 56) { var k = Math.round(t.x) + ',' + Math.round(t.y); (groups[k] = groups[k] || []).push(s); } }
+    Object.keys(groups).forEach(function (k) { var g = groups[k]; g.forEach(function (s, j) { if (g.length > 1) { var a = j / g.length * 6.283; s.bx += Math.cos(a) * 9; s.by += Math.sin(a) * 9; } }); });
+    for (p = 0; p < 4; p++) for (i = 0; i < 4; i++) { s = pieces[p][i]; s.x += (s.bx - s.x) * .3; s.y += (s.by - s.y) * .3; }
+  }
+  function drawPieces(t) {
+    var all = []; for (var p = 0; p < 4; p++) for (var i = 0; i < 4; i++) all.push({ p: p, i: i, s: pieces[p][i] });
+    all.sort(function (a, b) { return a.s.y - b.s.y; });
+    all.forEach(function (o) {
+      var s = o.s, can = phase === 'pick' && o.p === 0 && movable.indexOf(o.i) > -1, lift = can ? Math.abs(Math.sin(t / 160)) * 6 : 0;
+      ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.beginPath(); ctx.ellipse(s.x, s.y + 12, 12, 5, 0, 0, 6.283); ctx.fill();
+      ctx.save(); ctx.shadowColor = COL[o.p]; ctx.shadowBlur = can ? 22 : 8;
+      var g = ctx.createRadialGradient(s.x - 5, s.y - 9 - lift, 2, s.x, s.y - 4 - lift, 16); g.addColorStop(0, '#fff'); g.addColorStop(.35, COL[o.p]); g.addColorStop(1, '#00000066');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(s.x, s.y - 4 - lift, 13, 0, 6.283); ctx.fill(); ctx.restore();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = can ? 3 : 1.5; ctx.beginPath(); ctx.arc(s.x, s.y - 4 - lift, 13, 0, 6.283); ctx.stroke();
+    });
+  }
+  function loop(t) {
+    requestAnimationFrame(loop); last = t; updateTargets(); drawBoard(t); drawPieces(t); FX.draw(ctx);
+  }
+  cv.addEventListener('pointerdown', function (e) {
+    if (phase !== 'pick' || isCpu()) return;
+    var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * SZ, y = (e.clientY - r.top) / r.height * SZ, best = -1, bd = 26 * 26;
+    movable.forEach(function (i) { var s = pieces[0][i], dx = s.x - x, dy = s.y - 4 - y, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = i; } });
+    if (best > -1) movePiece(0, best, dice);
+  });
+  rollBtn.addEventListener('click', function () { if (turn === 0 && !isCpu()) rollDice(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!ov.classList.contains('hidden')) start(); else if (phase === 'roll' && turn === 0) rollDice(); }
+    if (phase === 'pick' && /^[1-4]$/.test(e.key)) { var i = +e.key - 1; if (movable.indexOf(i) > -1) movePiece(0, i, dice); }
+  });
+  go.addEventListener('click', start);
+  window.__ludoAuto = function () { autoHuman = true; if (phase === 'roll' && turn === 0) { rollBtn.disabled = true; rollDice(); } };
+  reset(); requestAnimationFrame(loop);
+})();
+</script></body></html>

@@ -1,0 +1,99 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Gem Quest</title><link rel="stylesheet" href="game-base.css"></head><body>
+<div id="hud"><span>Score <b id="score">0</b></span><span>Level <b id="lvl">1</b></span><span>Gems <b id="gems">0/0</b></span><span>Lives <b id="lives">3</b></span><span>Best <b id="best">0</b></span></div>
+<div class="stage"><canvas id="c" width="480" height="480"></canvas>
+<div class="overlay" id="ov"><h1>💎 Gem Quest</h1><p id="msg">Collect every gem, dodge the ghosts, then reach the glowing portal.<br>Arrow keys / WASD or swipe.</p><button class="btn" id="go" type="button">Enter dungeon</button></div></div>
+<script src="game-base.js"></script>
+<script>
+(function () {
+  'use strict';
+  var cv = GB.$('c'), ctx = cv.getContext('2d'), SZ = 480, FX = GB.particles(); GB.fit(cv);
+  var scoreEl = GB.$('score'), lvlEl = GB.$('lvl'), gemsEl = GB.$('gems'), livesEl = GB.$('lives'), bestEl = GB.$('best'), ov = GB.$('ov'), msg = GB.$('msg'), go = GB.$('go');
+  var level, score, lives, grid, N, cell, ox, player, gems, got, ghosts, exit, ghostT, running = false, last = 0, banner = 0, bannerTxt = '';
+  bestEl.textContent = GB.best();
+  function maze(cells) {
+    N = cells * 2 + 1; grid = []; var r, c;
+    for (r = 0; r < N; r++) { grid.push([]); for (c = 0; c < N; c++) grid[r].push(1); }
+    var st = [[1, 1]]; grid[1][1] = 0;
+    while (st.length) {
+      var cur = st[st.length - 1], opts = [[0, -2], [0, 2], [-2, 0], [2, 0]].filter(function (d) { var y = cur[0] + d[0], x = cur[1] + d[1]; return y > 0 && x > 0 && y < N - 1 && x < N - 1 && grid[y][x] === 1; });
+      if (!opts.length) { st.pop(); continue; }
+      var d = opts[GB.ri(0, opts.length - 1)]; grid[cur[0] + d[0] / 2][cur[1] + d[1] / 2] = 0; grid[cur[0] + d[0]][cur[1] + d[1]] = 0; st.push([cur[0] + d[0], cur[1] + d[1]]);
+    }
+    // a few extra openings so ghosts and player have loops
+    for (var k = 0; k < cells; k++) { var yy = GB.ri(1, N - 2), xx = GB.ri(1, N - 2); if (grid[yy][xx] === 1 && yy % 2 !== xx % 2) grid[yy][xx] = 0; }
+  }
+  function openCells() { var o = []; for (var r = 1; r < N - 1; r++) for (var c = 1; c < N - 1; c++) if (!grid[r][c]) o.push({ r: r, c: c }); return o; }
+  function dist(a, b) { return Math.abs(a.r - b.r) + Math.abs(a.c - b.c); }
+  function setup() {
+    var cells = Math.min(11, 4 + level); maze(cells); cell = Math.floor(SZ / N); ox = Math.floor((SZ - cell * N) / 2);
+    player = { r: 1, c: 1 }; exit = { r: N - 2, c: N - 2 }; got = 0;
+    var free = openCells().filter(function (o) { return dist(o, player) > 3 && dist(o, exit) > 1; });
+    gems = []; var want = 4 + level;
+    while (gems.length < want && free.length) { gems.push(free.splice(GB.ri(0, free.length - 1), 1)[0]); }
+    ghosts = []; var far = free.filter(function (o) { return dist(o, player) > N; });
+    for (var i = 0; i < Math.min(1 + Math.floor(level / 2), 4); i++) { var g = far.length ? far.splice(GB.ri(0, far.length - 1), 1)[0] : free[GB.ri(0, free.length - 1)]; ghosts.push({ r: g.r, c: g.c, sr: g.r, sc: g.c }); }
+    ghostT = 0; hud();
+  }
+  function hud() { scoreEl.textContent = score; lvlEl.textContent = level; gemsEl.textContent = got + '/' + gems.length; livesEl.textContent = lives; }
+  function respawn() { player.r = 1; player.c = 1; ghosts.forEach(function (g) { g.r = g.sr; g.c = g.sc; }); }
+  function hurt() {
+    lives--; FX.burst(ox + player.c * cell + cell / 2, player.r * cell + cell / 2, '#ff4d8d', 26); GB.beep(120, .4, 'sawtooth', .08); hud();
+    if (lives <= 0) { running = false; var nb = GB.saveBest(score); bestEl.textContent = GB.best(); GB.report(score); setTimeout(function () { msg.innerHTML = 'The ghosts got you 👻<br>Score <b>' + score + '</b> · Level <b>' + level + '</b>' + (nb ? '<br>🏆 New best!' : ''); go.textContent = 'Try again'; ov.classList.remove('hidden'); }, 500); }
+    else respawn();
+  }
+  function tryMove(dr, dc) {
+    if (!running || (banner > 0 && /cleared/.test(bannerTxt))) return; var r = player.r + dr, c = player.c + dc;
+    if (r < 0 || c < 0 || r >= N || c >= N || grid[r][c]) return; player.r = r; player.c = c; GB.beep(200, .03, 'sine', .02);
+    for (var i = gems.length - 1; i >= 0; i--) if (gems[i].r === r && gems[i].c === c) { gems.splice(i, 1); got++; score += 10; FX.burst(ox + c * cell + cell / 2, r * cell + cell / 2, '#2ee59d', 14); GB.beep(900 + got * 60, .1, 'square', .04); hud(); }
+    if (r === exit.r && c === exit.c) {
+      if (!gems.length) { score += 50 + level * 10; GB.beep(1100, .4, 'triangle', .06); FX.burst(ox + c * cell + cell / 2, r * cell + cell / 2, '#ffd23f', 40); bannerTxt = 'Level ' + level + ' cleared! +' + (50 + level * 10); banner = 70; level++; hud(); }
+      else { bannerTxt = 'Collect all gems first!'; banner = 40; }
+    }
+    for (var j = 0; j < ghosts.length; j++) if (running && ghosts[j].r === r && ghosts[j].c === c) { hurt(); break; }
+  }
+  function moveGhosts() {
+    ghosts.forEach(function (g) {
+      var nb = [[-1, 0], [1, 0], [0, -1], [0, 1]].map(function (d) { return { r: g.r + d[0], c: g.c + d[1] }; }).filter(function (p) { return !grid[p.r][p.c]; });
+      if (!nb.length) return; var pick;
+      if (Math.random() < Math.min(.7, .35 + level * .05)) { nb.sort(function (a, b) { return dist(a, player) - dist(b, player); }); pick = nb[0]; } else pick = nb[GB.ri(0, nb.length - 1)];
+      g.r = pick.r; g.c = pick.c;
+    });
+    for (var i = 0; i < ghosts.length; i++) if (ghosts[i].r === player.r && ghosts[i].c === player.c) { hurt(); break; }
+  }
+  function draw(t) {
+    ctx.fillStyle = '#0a0820'; ctx.fillRect(0, 0, SZ, SZ);
+    for (var r = 0; r < N; r++) for (var c = 0; c < N; c++) {
+      var x = ox + c * cell, y = r * cell;
+      if (grid[r][c]) { ctx.fillStyle = '#2b2370'; ctx.fillRect(x, y, cell, cell); ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillRect(x, y, cell, 2); }
+      else { ctx.fillStyle = (r + c) % 2 ? '#15113a' : '#171340'; ctx.fillRect(x, y, cell, cell); }
+    }
+    var open = !gems.length, ex = ox + exit.c * cell + cell / 2, ey = exit.r * cell + cell / 2;
+    ctx.save(); ctx.shadowColor = open ? '#ffd23f' : '#555'; ctx.shadowBlur = open ? 20 + Math.sin(t / 150) * 8 : 0; ctx.strokeStyle = open ? '#ffd23f' : '#6b6590'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(ex, ey, cell * .36 + Math.sin(t / 200) * 1.5, 0, 6.283); ctx.stroke(); ctx.restore();
+    gems.forEach(function (g) { var gx = ox + g.c * cell + cell / 2, gy = g.r * cell + cell / 2 + Math.sin(t / 250 + g.c) * 2, s = cell * .27; ctx.save(); ctx.shadowColor = '#2ee59d'; ctx.shadowBlur = 12; ctx.fillStyle = '#2ee59d'; ctx.beginPath(); ctx.moveTo(gx, gy - s); ctx.lineTo(gx + s, gy); ctx.lineTo(gx, gy + s); ctx.lineTo(gx - s, gy); ctx.closePath(); ctx.fill(); ctx.restore(); });
+    ghosts.forEach(function (g) { var gx = ox + g.c * cell + cell / 2, gy = g.r * cell + cell / 2 + Math.sin(t / 200 + g.r) * 1.5, s = cell * .34; ctx.save(); ctx.shadowColor = '#ff4d8d'; ctx.shadowBlur = 14; ctx.fillStyle = '#ff7aa8'; ctx.beginPath(); ctx.arc(gx, gy - s * .15, s, Math.PI, 0); ctx.lineTo(gx + s, gy + s); ctx.lineTo(gx + s * .5, gy + s * .7); ctx.lineTo(gx, gy + s); ctx.lineTo(gx - s * .5, gy + s * .7); ctx.lineTo(gx - s, gy + s); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.fillRect(gx - s * .5, gy - s * .4, s * .3, s * .3); ctx.fillRect(gx + s * .2, gy - s * .4, s * .3, s * .3); ctx.restore(); });
+    var px = ox + player.c * cell + cell / 2, py = player.r * cell + cell / 2;
+    ctx.save(); ctx.shadowColor = '#22d3ee'; ctx.shadowBlur = 16; ctx.fillStyle = '#22d3ee'; ctx.beginPath(); ctx.arc(px, py, cell * .34, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = '#0a0820'; ctx.beginPath(); ctx.arc(px - cell * .1, py - cell * .05, cell * .06, 0, 6.283); ctx.arc(px + cell * .1, py - cell * .05, cell * .06, 0, 6.283); ctx.fill(); ctx.restore();
+    FX.draw(ctx);
+    var R = cell * 6.5, gr = ctx.createRadialGradient(px, py, R * .35, px, py, R); gr.addColorStop(0, 'rgba(6,4,24,0)'); gr.addColorStop(1, 'rgba(6,4,24,.93)'); ctx.fillStyle = gr; ctx.fillRect(0, 0, SZ, SZ);
+    if (banner > 0) { ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, SZ / 2 - 30, SZ, 60); ctx.fillStyle = '#ffd23f'; ctx.font = '700 26px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(bannerTxt, SZ / 2, SZ / 2 + 9); }
+  }
+  function loop(t) {
+    requestAnimationFrame(loop); var dt = Math.min(60, t - (last || t)); last = t;
+    if (running) {
+      if (banner > 0) { banner -= dt / 16.67; if (banner <= 0 && /cleared/.test(bannerTxt)) setup(); }
+      if (!(banner > 0 && /cleared/.test(bannerTxt))) { ghostT += dt; if (ghostT > Math.max(260, 560 - level * 30)) { ghostT = 0; moveGhosts(); } }
+    }
+    draw(t);
+  }
+  function start() { level = 1; score = 0; lives = 3; banner = 0; setup(); running = true; ov.classList.add('hidden'); }
+  document.addEventListener('keydown', function (e) {
+    var m = { ArrowUp: [-1, 0], w: [-1, 0], W: [-1, 0], ArrowDown: [1, 0], s: [1, 0], S: [1, 0], ArrowLeft: [0, -1], a: [0, -1], A: [0, -1], ArrowRight: [0, 1], d: [0, 1], D: [0, 1] }[e.key];
+    if (m) { e.preventDefault(); tryMove(m[0], m[1]); }
+    if ((e.key === 'Enter' || e.key === ' ') && !running) { e.preventDefault(); start(); }
+  });
+  GB.swipe(function (d) { var m = { U: [-1, 0], D: [1, 0], L: [0, -1], R: [0, 1] }[d]; tryMove(m[0], m[1]); });
+  go.addEventListener('click', start);
+  level = 1; score = 0; lives = 3; setup(); requestAnimationFrame(loop);
+})();
+</script></body></html>

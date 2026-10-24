@@ -1,0 +1,77 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Neon Racer</title><link rel="stylesheet" href="game-base.css"></head><body>
+<div id="hud"><span>Score <b id="score">0</b></span><span>Speed <b id="spd">0</b></span><span>Best <b id="best">0</b></span></div>
+<div class="stage"><canvas id="c" width="360" height="560"></canvas>
+<div class="overlay" id="ov"><h1>🏎️ Neon Racer</h1><p id="msg">Dodge the traffic and grab coins!<br>← → / A D, or tap left / right side.</p><button class="btn" id="go" type="button">Start engine</button></div></div>
+<script src="game-base.js"></script>
+<script>
+(function () {
+  'use strict';
+  var cv = GB.$('c'), ctx = cv.getContext('2d'), W = cv.width, H = cv.height, FX = GB.particles(); GB.fit(cv);
+  var RX = 30, RW = 300, LW = 100, scoreEl = GB.$('score'), spd = GB.$('spd'), bestEl = GB.$('best'), ov = GB.$('ov'), msg = GB.$('msg'), go = GB.$('go');
+  var lane, px, cars, coins, v, dist, score, nextSpawn, running = false, last = 0, off = 0, shake = 0, lastLane = 1;
+  bestEl.textContent = GB.best();
+  function lx(l) { return RX + l * LW + LW / 2; }
+  function reset() { lane = 1; px = lx(1); cars = []; coins = []; v = 5; dist = 0; score = 0; nextSpawn = 300; shake = 0; scoreEl.textContent = 0; }
+  function spawn() {
+    var l = GB.ri(0, 2); if (l === lastLane && Math.random() < .5) l = (l + GB.ri(1, 2)) % 3; lastLane = l;
+    cars.push({ l: l, y: -90, s: GB.rand(.8, 2), h: GB.ri(0, 360) });
+    if (Math.random() < .55) { var cl = (l + GB.ri(1, 2)) % 3; coins.push({ l: cl, y: -90 - GB.ri(0, 90) }); }
+  }
+  function carShape(x, y, w, h, col, glow, up) {
+    ctx.save(); ctx.shadowColor = glow; ctx.shadowBlur = 16; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - w / 2, y - h / 2, w, h, 10) : ctx.rect(x - w / 2, y - h / 2, w, h); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(10,8,40,.85)'; ctx.fillRect(x - w / 2 + 6, y + (up ? -h / 2 + 14 : -h / 2 + 22), w - 12, 18);
+    ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(x - w / 2 + 5, y + (up ? -h / 2 + 3 : h / 2 - 7), 8, 4); ctx.fillRect(x + w / 2 - 13, y + (up ? -h / 2 + 3 : h / 2 - 7), 8, 4);
+    ctx.restore();
+  }
+  function crash() {
+    running = false; shake = 14; GB.beep(90, .6, 'sawtooth', .09); FX.burst(px, 470, '#ffd23f', 40); FX.burst(px, 470, '#ff4d8d', 30);
+    var nb = GB.saveBest(score); bestEl.textContent = GB.best(); GB.report(score);
+    setTimeout(function () { msg.innerHTML = 'Crash! 💥<br>Score <b>' + score + '</b>' + (nb ? ' · 🏆 New best!' : ''); go.textContent = 'Race again'; ov.classList.remove('hidden'); }, 700);
+  }
+  function update(k) {
+    v = Math.min(15, 5 + score / 160); dist += v * k; off = (off + v * k) % 40;
+    px += (lx(lane) - px) * Math.min(1, .22 * k);
+    nextSpawn -= v * k; if (nextSpawn <= 0) { spawn(); nextSpawn = Math.max(170, 330 - v * 9); }
+    score = Math.floor(dist / 10) + (score - Math.floor((dist - v * k) / 10)); // keeps coin bonuses
+    cars.forEach(function (c) { c.y += (v - c.s) * k; });
+    coins.forEach(function (c) { c.y += v * k; });
+    cars = cars.filter(function (c) { return c.y < H + 100; }); coins = coins.filter(function (c) { return c.y < H + 40; });
+    for (var i = 0; i < cars.length; i++) { var c = cars[i]; if (Math.abs(lx(c.l) - px) < 36 && Math.abs(c.y - 470) < 68) { crash(); return; } }
+    for (var j = coins.length - 1; j >= 0; j--) { var q = coins[j]; if (Math.abs(lx(q.l) - px) < 30 && Math.abs(q.y - 470) < 48) { score += 50; dist += 0; coins.splice(j, 1); FX.burst(lx(q.l), q.y, '#ffd23f', 12); GB.beep(1040, .08, 'square', .04); } }
+    scoreEl.textContent = score; spd.textContent = Math.round(v * 14);
+  }
+  function draw(k) {
+    ctx.save(); if (shake > 0) { ctx.translate(GB.rand(-shake, shake), GB.rand(-shake, shake)); shake -= .8 * k; }
+    ctx.fillStyle = '#0b0a22'; ctx.fillRect(-20, -20, W + 40, H + 40);
+    ctx.fillStyle = '#17133f'; ctx.fillRect(RX, 0, RW, H);
+    ctx.fillStyle = '#ff4d8d'; ctx.fillRect(RX - 4, 0, 4, H); ctx.fillRect(RX + RW, 0, 4, H);
+    ctx.fillStyle = 'rgba(255,255,255,.55)';
+    for (var l = 1; l < 3; l++) for (var y = -40 + off; y < H; y += 40) ctx.fillRect(RX + l * LW - 2, y, 4, 22);
+    ctx.fillStyle = 'rgba(124,92,255,.35)'; for (var s = -40 + off; s < H; s += 40) { ctx.fillRect(8, s, 10, 22); ctx.fillRect(W - 18, s, 10, 22); }
+    coins.forEach(function (c) { ctx.save(); ctx.shadowColor = '#ffd23f'; ctx.shadowBlur = 14; ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.ellipse(lx(c.l), c.y, 11 * Math.abs(Math.cos(c.y / 25)) + 3, 12, 0, 0, 6.283); ctx.fill(); ctx.restore(); });
+    cars.forEach(function (c) { carShape(lx(c.l), c.y, 46, 82, 'hsl(' + c.h + ',80%,58%)', 'hsl(' + c.h + ',90%,60%)', false); });
+    if (running || shake > 0) { if (running) carShape(px, 470, 46, 82, '#22d3ee', '#22d3ee', true); }
+    if (running) { ctx.fillStyle = 'rgba(34,211,238,.25)'; ctx.fillRect(px - 14, 515, 8, 30 + v * 2); ctx.fillRect(px + 6, 515, 8, 30 + v * 2); }
+    FX.draw(ctx, k); ctx.restore();
+  }
+  function loop(t) { requestAnimationFrame(loop); var dt = Math.min(50, t - (last || t)); last = t; var k = dt / 16.67; if (running) update(k); draw(k); }
+  function start() { reset(); running = true; ov.classList.add('hidden'); GB.beep(440, .15, 'triangle', .05); }
+  function move(d) { if (!running) return; lane = Math.max(0, Math.min(2, lane + d)); GB.beep(240, .04, 'sine', .03); }
+  document.addEventListener('keydown', function (e) {
+    var k = e.key;
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A') { e.preventDefault(); move(-1); }
+    if (k === 'ArrowRight' || k === 'd' || k === 'D') { e.preventDefault(); move(1); }
+    if ((k === 'Enter' || k === ' ') && !running && !ov.classList.contains('hidden')) { e.preventDefault(); start(); }
+  });
+  var sx = 0, sy = 0;
+  cv.addEventListener('pointerdown', function (e) { sx = e.clientX; sy = e.clientY; });
+  cv.addEventListener('pointerup', function (e) {
+    var dx = e.clientX - sx, r = cv.getBoundingClientRect();
+    if (Math.abs(dx) > 28 && Math.abs(dx) > Math.abs(e.clientY - sy)) move(dx > 0 ? 1 : -1);
+    else move(e.clientX - r.left < r.width / 2 ? -1 : 1);
+  });
+  go.addEventListener('click', start);
+  reset(); requestAnimationFrame(loop);
+})();
+</script></body></html>

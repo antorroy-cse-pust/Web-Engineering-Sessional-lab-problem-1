@@ -1,0 +1,76 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Merge 2048</title><link rel="stylesheet" href="game-base.css">
+<style>
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;background:#2a2466;padding:10px;border-radius:16px;width:min(94vw,calc(100vh - 110px),440px);aspect-ratio:1;box-shadow:0 0 0 2px rgba(124,92,255,.55),0 0 44px rgba(124,92,255,.35)}
+.cell{border-radius:10px;display:grid;place-items:center;font-weight:700;background:rgba(255,255,255,.07);font-size:clamp(18px,7vw,36px);transition:background .12s}
+.cell.pop{animation:pop .22s}.cell.bump{animation:pop .26s}
+.stage{border-radius:16px}.overlay{border-radius:16px}
+</style></head><body>
+<div id="hud"><span>Score <b id="score">0</b></span><span>Best <b id="best">0</b></span><button class="btn sm" id="newg" type="button">New game</button></div>
+<div class="stage"><div class="board" id="board" aria-label="2048 board"></div>
+<div class="overlay hidden" id="ov"><h1 id="ovt">Game over</h1><p id="msg"></p><button class="btn" id="go" type="button">Play again</button></div></div>
+<script src="game-base.js"></script>
+<script>
+(function () {
+  'use strict';
+  var boardEl = GB.$('board'), scoreEl = GB.$('score'), bestEl = GB.$('best'), ov = GB.$('ov'), msg = GB.$('msg'), ovt = GB.$('ovt');
+  var g, fresh, merged, score, over, won;
+  var COL = { 0: ['rgba(255,255,255,.07)', '#fff'], 2: ['#eee4da', '#5b4a3a'], 4: ['#ede0c8', '#5b4a3a'], 8: ['#f2b179', '#fff'], 16: ['#f59563', '#fff'], 32: ['#f67c5f', '#fff'], 64: ['#f65e3b', '#fff'], 128: ['#edcf72', '#fff'], 256: ['#edcc61', '#fff'], 512: ['#edc850', '#fff'], 1024: ['#edc53f', '#fff'], 2048: ['#7c5cff', '#fff'] };
+  bestEl.textContent = GB.best();
+  function empty() { return [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; }
+  function addTile() {
+    var e = []; for (var r = 0; r < 4; r++) for (var c = 0; c < 4; c++) if (!g[r][c]) e.push([r, c]);
+    if (!e.length) return; var p = e[GB.ri(0, e.length - 1)]; g[p[0]][p[1]] = Math.random() < .9 ? 2 : 4; fresh[p[0]][p[1]] = 1;
+  }
+  function newGame() {
+    if (score > 0 && !over) GB.report(score);
+    g = empty(); fresh = empty(); merged = empty(); score = 0; over = false; won = false; scoreEl.textContent = 0; ov.classList.add('hidden');
+    addTile(); addTile(); render();
+  }
+  function render() {
+    boardEl.innerHTML = '';
+    for (var r = 0; r < 4; r++) for (var c = 0; c < 4; c++) {
+      var v = g[r][c], d = document.createElement('div'), col = COL[v] || ['#3c3a32', '#fff'];
+      d.className = 'cell' + (fresh[r][c] ? ' pop' : '') + (merged[r][c] ? ' bump' : '');
+      d.style.background = col[0]; d.style.color = col[1];
+      if (v) { d.textContent = v; if (v >= 128) d.style.boxShadow = '0 0 20px ' + col[0]; if (v >= 1024) d.style.fontSize = 'clamp(14px,5.2vw,28px)'; }
+      boardEl.appendChild(d);
+    }
+    scoreEl.textContent = score;
+  }
+  function pos(i, k, d) { return [[i, k], [i, 3 - k], [k, i], [3 - k, i]][d]; }
+  function move(d) {
+    if (over) return; var moved = false, gain = 0; fresh = empty(); merged = empty();
+    for (var i = 0; i < 4; i++) {
+      var line = [], k, p;
+      for (k = 0; k < 4; k++) { p = pos(i, k, d); line.push(g[p[0]][p[1]]); }
+      var arr = line.filter(Boolean), res = [], mk = [];
+      for (k = 0; k < arr.length; k++) {
+        if (arr[k] === arr[k + 1]) { res.push(arr[k] * 2); gain += arr[k] * 2; mk.push(res.length - 1); k++; } else res.push(arr[k]);
+      }
+      while (res.length < 4) res.push(0);
+      for (k = 0; k < 4; k++) { if (res[k] !== line[k]) moved = true; p = pos(i, k, d); g[p[0]][p[1]] = res[k]; if (mk.indexOf(k) > -1) merged[p[0]][p[1]] = 1; }
+    }
+    if (!moved) return;
+    score += gain; if (gain) GB.beep(300 + Math.min(gain, 512), .08, 'triangle', .05); else GB.beep(200, .04, 'sine', .03);
+    addTile(); render();
+    if (!won && g.some(function (r) { return r.indexOf(2048) > -1; })) { won = true; GB.beep(880, .4, 'square', .05); msg.textContent = 'You made 2048! 🎉 Keep going for a higher score.'; ovt.textContent = 'You win!'; GB.$('go').textContent = 'Keep playing'; ov.classList.remove('hidden'); }
+    if (!canMove()) finish();
+  }
+  function canMove() {
+    for (var r = 0; r < 4; r++) for (var c = 0; c < 4; c++) { if (!g[r][c]) return true; if (c < 3 && g[r][c] === g[r][c + 1]) return true; if (r < 3 && g[r][c] === g[r + 1][c]) return true; }
+    return false;
+  }
+  function finish() {
+    over = true; var nb = GB.saveBest(score); bestEl.textContent = GB.best(); GB.report(score); GB.beep(130, .5, 'sawtooth', .06);
+    ovt.textContent = 'Game over'; msg.innerHTML = 'Final score <b>' + score + '</b>' + (nb ? ' · 🏆 New best!' : ''); GB.$('go').textContent = 'Play again'; ov.classList.remove('hidden');
+  }
+  GB.$('go').addEventListener('click', function () { if (over) newGame(); else ov.classList.add('hidden'); });
+  GB.$('newg').addEventListener('click', newGame);
+  document.addEventListener('keydown', function (e) {
+    var m = { ArrowLeft: 0, a: 0, A: 0, ArrowRight: 1, d: 1, D: 1, ArrowUp: 2, w: 2, W: 2, ArrowDown: 3, s: 3, S: 3 }[e.key];
+    if (m !== undefined) { e.preventDefault(); if (ov.classList.contains('hidden')) move(m); }
+  });
+  GB.swipe(function (d) { if (ov.classList.contains('hidden')) move({ L: 0, R: 1, U: 2, D: 3 }[d]); });
+  newGame();
+})();
+</script></body></html>

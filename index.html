@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PlayNova – Free Online Games to Play Instantly in Your Browser</title>
+<meta name="description" content="Play free online games on PlayNova: puzzle, action, racing, arcade, adventure and brain training games. No downloads, works on desktop, tablet and mobile.">
+<meta name="keywords" content="free online games, browser games, HTML5 games, puzzle games, racing games, arcade games, brain training">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta name="theme-color" content="#0c0a1f">
+<link rel="canonical" href="https://www.example.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="PlayNova">
+<meta property="og:title" content="PlayNova – Free Online Games">
+<meta property="og:description" content="Puzzle, action, racing, arcade and brain games – play instantly in your browser.">
+<meta property="og:url" content="https://www.example.com/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%237c5cff'/%3E%3Ctext x='32' y='46' font-size='34' text-anchor='middle'%3E🎮%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebSite","name":"PlayNova","url":"https://www.example.com/","potentialAction":{"@type":"SearchAction","target":"https://www.example.com/index.html?q={search_term_string}","query-input":"required name=search_term_string"}}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="site-header"></div>
+
+<main id="main">
+  <section class="wrap intro reveal">
+    <h1>Play <span class="grad">free online games</span> instantly</h1>
+    <p>Puzzle, action, racing, arcade, adventure and brain-training games – right in your browser. No downloads, no sign-up, works on phone, tablet and desktop.</p>
+    <div class="stats" id="stats" aria-label="Site statistics"></div>
+  </section>
+
+  <section class="wrap hero" aria-label="Featured games">
+    <div class="hero-main swap" id="hero"></div>
+    <aside class="hero-side reveal"><h2>🔥 Trending now</h2><ol id="trend"></ol></aside>
+  </section>
+
+  <div class="wrap"><div class="chips" id="chips" aria-label="Game categories"></div></div>
+
+  <div class="wrap layout">
+    <div class="content">
+      <section id="favWrap" hidden><div class="sec-head"><h2>♥ Your Favourites</h2></div><div class="grid" id="favGrid"></div></section>
+      <section id="recentWrap" hidden><div class="sec-head"><h2>🕘 Continue Playing</h2></div><div class="grid" id="recentGrid"></div></section>
+
+      <section id="popular"><div class="sec-head"><h2>🔥 Popular Games</h2><a href="#games">See all →</a></div><div class="grid" id="popGrid"></div></section>
+
+      <div class="ad-mount" data-ad="incontent" data-w="728" data-h="90" data-label="In-content banner"></div>
+
+      <section id="new"><div class="sec-head"><h2>✨ New Games</h2></div><div class="grid" id="newGrid"></div></section>
+
+      <section id="games">
+        <div class="sec-head"><h2 id="allTitle">🎮 All Games</h2>
+          <label class="sr"><select id="sort" class="select" aria-label="Sort games">
+            <option value="popular">Most played</option><option value="new">Newest</option><option value="rating">Top rated</option><option value="az">A – Z</option>
+          </select></label></div>
+        <div class="grid" id="allGrid"></div>
+      </section>
+
+      <section id="leaderboard">
+        <div class="sec-head"><h2>🏆 Leaderboard</h2><select id="lbSel" class="select" aria-label="Choose game"></select></div>
+        <div class="table-wrap"><table class="tbl"><thead><tr><th>#</th><th>Player</th><th>Game</th><th>Score</th><th>Date</th></tr></thead><tbody id="lbBody"></tbody></table></div>
+      </section>
+    </div>
+
+    <aside class="side">
+      <div class="ad-mount" style="margin:0" data-ad="sidebar" data-w="300" data-h="250" data-label="Sidebar rectangle"></div>
+      <div class="card reveal" id="daily"></div>
+      <div class="card reveal"><h3>💡 Pro tips</h3><ul class="tips"><li>Press <kbd>/</kbd> to search instantly.</li><li>Tap ♡ on a game to save it.</li><li>Scores are saved with your player name.</li></ul></div>
+      <div class="ad-mount" style="margin:0" data-ad="sidebar2" data-w="300" data-h="250" data-label="Sidebar rectangle 2"></div>
+    </aside>
+  </div>
+
+  <section id="premium" class="wrap premium reveal">
+    <div class="prem-box">
+      <span class="tag-soon">COMING SOON</span>
+      <h2>PlayNova <span class="grad">Premium</span> ✨</h2>
+      <p>An optional ad-free membership for players who want a cleaner experience. Join the waiting list and be first to know.</p>
+      <div class="perks">
+        <div class="perk"><span>🚫</span><h3>Ad-free play</h3><p>No banners, no interruptions – just games.</p></div>
+        <div class="perk"><span>☁️</span><h3>Cloud saves</h3><p>Keep scores and favourites on every device.</p></div>
+        <div class="perk"><span>🏅</span><h3>Exclusive badges</h3><p>Stand out on every leaderboard.</p></div>
+        <div class="perk"><span>🎁</span><h3>Early access</h3><p>Play brand-new games before everyone else.</p></div>
+      </div>
+      <form class="wait" id="waitForm" novalidate>
+        <input type="email" id="waitEmail" placeholder="Your email address" aria-label="Email for waiting list" required>
+        <button class="btn btn-primary" type="submit">Join waiting list</button>
+      </form>
+      <p class="err" id="waitErr" role="alert"></p>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+<noscript><p style="text-align:center;padding:20px">Please enable JavaScript to play games on PlayNova.</p></noscript>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/home.js"></script>
+</body>
+</html>

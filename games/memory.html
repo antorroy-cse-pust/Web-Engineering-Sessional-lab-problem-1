@@ -1,0 +1,56 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Memory Match</title><link rel="stylesheet" href="game-base.css">
+<style>
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;width:min(94vw,calc(100vh - 110px),440px);aspect-ratio:1;perspective:900px}
+.card{position:relative;border:0;padding:0;background:none;cursor:pointer;transform-style:preserve-3d;transition:transform .45s cubic-bezier(.3,1.3,.5,1)}
+.card.up{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;border-radius:14px;display:grid;place-items:center;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.back{background:linear-gradient(135deg,#7c5cff,#ff4d8d);box-shadow:inset 0 0 0 3px rgba(255,255,255,.18);font-size:clamp(18px,6vw,30px)}
+.front{background:#fff;transform:rotateY(180deg);font-size:clamp(26px,9vw,48px)}
+.card.ok .front{background:#c8ffe6;box-shadow:0 0 22px #2ee59d;animation:pop .4s}
+.card.bad{animation:shake .3s}
+.stage{border-radius:16px}.overlay{border-radius:16px}
+</style></head><body>
+<div id="hud"><span>Moves <b id="moves">0</b></span><span>Time <b id="time">0</b>s</span><span>Best <b id="best">0</b></span><button class="btn sm" id="newg" type="button">Restart</button></div>
+<div class="stage"><div class="board" id="board"></div>
+<div class="overlay hidden" id="ov"><h1>🎉 You did it!</h1><p id="msg"></p><button class="btn" id="go" type="button">Play again</button></div></div>
+<script src="game-base.js"></script>
+<script>
+(function () {
+  'use strict';
+  var EM = ['🍎', '🚀', '🎸', '🐼', '🌈', '⚽', '🍕', '🦋'], boardEl = GB.$('board'), movesEl = GB.$('moves'), timeEl = GB.$('time'), bestEl = GB.$('best'), ov = GB.$('ov'), msg = GB.$('msg');
+  var first = null, lock = false, moves, found, secs, timer = null;
+  bestEl.textContent = GB.best();
+  function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  function newGame() {
+    clearInterval(timer); timer = null; moves = 0; found = 0; secs = 0; first = null; lock = false;
+    movesEl.textContent = 0; timeEl.textContent = 0; ov.classList.add('hidden'); boardEl.innerHTML = '';
+    shuffle(EM.concat(EM)).forEach(function (e) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'card'; b.setAttribute('data-e', e); b.setAttribute('aria-label', 'Hidden card');
+      b.innerHTML = '<span class="face back">❓</span><span class="face front">' + e + '</span>'; boardEl.appendChild(b);
+    });
+  }
+  boardEl.addEventListener('click', function (ev) {
+    var c = ev.target.closest('.card'); if (!c || lock || c.classList.contains('up')) return;
+    if (!timer) timer = setInterval(function () { secs++; timeEl.textContent = secs; }, 1000);
+    c.classList.add('up'); GB.beep(520, .07, 'triangle', .05);
+    if (!first) { first = c; return; }
+    moves++; movesEl.textContent = moves; var a = first; first = null;
+    if (a.getAttribute('data-e') === c.getAttribute('data-e')) {
+      a.classList.add('ok'); c.classList.add('ok'); found++; GB.beep(780, .18, 'sine', .06);
+      if (found === 8) win();
+    } else {
+      lock = true; a.classList.add('bad'); c.classList.add('bad');
+      setTimeout(function () { a.classList.remove('up', 'bad'); c.classList.remove('up', 'bad'); lock = false; }, 750);
+    }
+  });
+  function win() {
+    clearInterval(timer); timer = null;
+    var score = Math.max(50, 1500 - moves * 25 - secs * 8), nb = GB.saveBest(score); bestEl.textContent = GB.best();
+    GB.report(score); GB.beep(988, .4, 'square', .05);
+    msg.innerHTML = 'Moves <b>' + moves + '</b> · Time <b>' + secs + 's</b><br>Score <b>' + score + '</b>' + (nb ? ' · 🏆 New best!' : '');
+    setTimeout(function () { ov.classList.remove('hidden'); }, 600);
+  }
+  GB.$('go').addEventListener('click', newGame); GB.$('newg').addEventListener('click', newGame);
+  newGame();
+})();
+</script></body></html>
